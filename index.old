@@ -1,0 +1,102 @@
+mkdir frontend
+cat > frontend/index.html <<'HTML'
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Network Discovery POC</title>
+  <style>
+    body{font-family:system-ui,Arial;margin:20px}
+    .device{border:1px solid #ddd;padding:12px;margin:8px;border-radius:6px}
+    .up{background:#e8f6ea}
+    .down{background:#fdecea}
+    .group{font-size:0.9rem;color:#333;margin-bottom:6px}
+    .highlight{font-weight:700;color:#b00020}
+    .ports{margin-top:6px}
+    .device button{margin-top:8px}
+    header{display:flex;justify-content:space-between;align-items:center}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Network Discovery POC</h1>
+    <div>
+      <button onclick="seedSample()">Add Sample Devices</button>
+      <button onclick="reload()">Reload</button>
+    </div>
+  </header>
+
+  <section>
+    <h2>Recently Discovered Devices</h2>
+    <div id="devices"></div>
+  </section>
+
+  <script>
+    const API_BASE = "http://127.0.0.1:8000";
+
+    async function fetchDevices(){
+      const res = await fetch(`${API_BASE}/devices/`);
+      const devices = await res.json();
+      const c = document.getElementById('devices');
+      c.innerHTML = '';
+      devices.forEach(d => {
+        const el = document.createElement('div');
+        el.className = 'device ' + (d.status && d.status.toLowerCase() === 'up' ? 'up' : 'down');
+        el.innerHTML = `
+          <div class="group">${d.device_group || 'Unknown'}</div>
+          <strong>${d.hostname || ''} (${d.ip})</strong><br>
+          Status: <em>${d.status || 'Unknown'}</em><br>
+          Last seen: ${d.last_seen || ''}
+          <div class="ports">Open ports: ${renderPorts(d.open_ports)}</div>
+          <button onclick="viewSNMP(${d.id})">View SNMP</button>
+        `;
+        c.appendChild(el);
+      });
+    }
+
+    function renderPorts(portStr){
+      if(!portStr) return '—';
+      const suspicious = [21,80,8080];
+      return portStr.split(',').map(p => {
+        p = p.trim();
+        if(!p) return '';
+        const num = parseInt(p);
+        if(suspicious.includes(num)) return `<span class="highlight">${p}</span>`;
+        return `<span>${p}</span>`;
+      }).join(', ');
+    }
+
+    async function viewSNMP(id){
+      const res = await fetch(`${API_BASE}/device/${id}`);
+      const d = await res.json();
+      // Simple SNMP demo view - expand later
+      const text = `SNMP View\nHostname: ${d.hostname}\nIP: ${d.ip}\nGroup: ${d.device_group}\nStatus: ${d.status}\nOpen ports: ${d.open_ports}`;
+      alert(text);
+    }
+
+    async function seedSample(){
+      // Add several sample devices
+      const samples = [
+        { ip: "192.168.1.10", hostname: "webserver-1", status: "Up", device_group: "Server", open_ports: "22,80,443" },
+        { ip: "192.168.1.20", hostname: "switch-1", status: "Up", device_group: "Switch", open_ports: "161" },
+        { ip: "192.168.1.30", hostname: "ip-phone-1", status: "Up", device_group: "VOIP", open_ports: "5060,80" },
+        { ip: "192.168.1.40", hostname: "legacy-ftp", status: "Down", device_group: "Server", open_ports: "21" },
+      ];
+      for(const s of samples){
+        await fetch(`${API_BASE}/devices/`, {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify(s)
+        });
+      }
+      await fetchDevices();
+    }
+
+    function reload(){ fetchDevices(); }
+
+    // initial
+    fetchDevices();
+  </script>
+</body>
+</html>
+HTML

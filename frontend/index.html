@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Network Discovery POC</title>
+
+  <!-- Font Awesome for icons -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f9;
+      color: #333;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 20px;
+      background-color: #2C3E50;
+      color: white;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: 1.6rem;
+    }
+
+    header button {
+      padding: 8px 16px;
+      margin-left: 12px;
+      background-color: #3498db;
+      border: none;
+      color: white;
+      font-size: 1rem;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    header button:hover {
+      background-color: #2980b9;
+    }
+
+    .container {
+      padding: 20px;
+    }
+
+    h2 {
+      color: #2C3E50;
+      font-size: 1.4rem;
+      margin-bottom: 10px;
+    }
+
+    .device-card {
+      display: flex;
+      flex-direction: column;
+      background-color: white;
+      padding: 15px;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      margin: 12px 0;
+      cursor: pointer;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .device-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+    }
+
+    .device-header {
+      display: flex;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+
+    .device-header i {
+      font-size: 2rem;
+      margin-right: 12px;
+    }
+
+    .device-header h3 {
+      margin: 0;
+      font-size: 1.1rem;
+    }
+
+    .device-status {
+      margin-left: auto;
+      font-weight: bold;
+      padding: 6px 12px;
+      border-radius: 12px;
+      font-size: 0.9rem;
+    }
+
+    .status-up {
+      background-color: #27ae60;
+      color: white;
+    }
+
+    .status-down {
+      background-color: #e74c3c;
+      color: white;
+    }
+
+    .device-info {
+      font-size: 0.9rem;
+      color: #7f8c8d;
+      margin-bottom: 8px;
+    }
+
+    .ports {
+      font-size: 0.9rem;
+      color: #34495e;
+      margin-top: 10px;
+    }
+
+    .highlight {
+      font-weight: bold;
+      color: #e74c3c;
+    }
+
+    .device button {
+      margin-top: 12px;
+      padding: 8px 14px;
+      border: none;
+      background-color: #3498db;
+      color: white;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+
+    .device button:hover {
+      background-color: #2980b9;
+    }
+
+    .device-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 768px) {
+      .device-card {
+        flex: 1 1 45%;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .device-card {
+        flex: 1 1 100%;
+      }
+    }
+
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Network Discovery POC</h1>
+    <div>
+      <button onclick="seedSample()">Add Sample Devices</button>
+      <button onclick="reload()">Reload</button>
+    </div>
+  </header>
+
+  <div class="container">
+    <h2>Recently Discovered Devices</h2>
+    <div id="devices" class="device-list"></div>
+  </div>
+
+  <script>
+    const API_BASE = "http://127.0.0.1:8000";
+
+    async function fetchDevices() {
+      const res = await fetch(`${API_BASE}/devices/`);
+      const devices = await res.json();
+      const container = document.getElementById('devices');
+      container.innerHTML = '';
+      devices.forEach(d => {
+        const el = document.createElement('div');
+        el.className = 'device-card';
+        el.innerHTML = `
+          <div class="device-header">
+            <i class="fas ${getIconClass(d.device_group)}"></i>
+            <div>
+              <h3>${d.hostname || 'Unknown Hostname'} (${d.ip})</h3>
+              <div class="device-info">
+                Status: <em>${d.status || 'Unknown'}</em><br>
+                Last seen: ${d.last_seen || 'N/A'}
+              </div>
+            </div>
+            <div class="device-status ${d.status === 'Up' ? 'status-up' : 'status-down'}">
+              ${d.status || 'Unknown'}
+            </div>
+          </div>
+          <div class="ports">Open ports: ${renderPorts(d.open_ports)}</div>
+          <button onclick="viewSNMP(${d.id})">View SNMP</button>
+        `;
+        container.appendChild(el);
+      });
+    }
+
+    function renderPorts(portStr) {
+      if (!portStr) return '—';
+      const suspicious = [21, 80, 8080];
+      return portStr.split(',').map(p => {
+        p = p.trim();
+        if (!p) return '';
+        const num = parseInt(p);
+        if (suspicious.includes(num)) return `<span class="highlight">${p}</span>`;
+        return `<span>${p}</span>`;
+      }).join(', ');
+    }
+
+    function getIconClass(deviceGroup) {
+      switch (deviceGroup.toLowerCase()) {
+        case 'server': return 'fa-server';
+        case 'switch': return 'fa-cogs';
+        case 'voip': return 'fa-phone';
+        default: return 'fa-laptop';
+      }
+    }
+
+    async function viewSNMP(id) {
+      const res = await fetch(`${API_BASE}/device/${id}`);
+      const d = await res.json();
+      // Display SNMP info or any additional data
+      const text = `SNMP View\nHostname: ${d.hostname}\nIP: ${d.ip}\nGroup: ${d.device_group}\nStatus: ${d.status}\nOpen ports: ${d.open_ports}`;
+      alert(text);
+    }
+
+    async function seedSample() {
+      const samples = [
+        { ip: "192.168.1.10", hostname: "webserver-1", status: "Up", device_group: "Server", open_ports: "22,80,443" },
+        { ip: "192.168.1.20", hostname: "switch-1", status: "Up", device_group: "Switch", open_ports: "161" },
+        { ip: "192.168.1.30", hostname: "ip-phone-1", status: "Up", device_group: "VOIP", open_ports: "5060,80" },
+        { ip: "192.168.1.40", hostname: "legacy-ftp", status: "Down", device_group: "Server", open_ports: "21" },
+      ];
+      for (const s of samples) {
+        await fetch(`${API_BASE}/devices/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(s)
+        });
+      }
+      await fetchDevices();
+    }
+
+    function reload() { fetchDevices(); }
+
+    // Initial load
+    fetchDevices();
+  </script>
+</body>
+</html>
