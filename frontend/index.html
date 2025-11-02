@@ -196,6 +196,22 @@
         flex: 1 1 100%;
       }
     }
+
+    /* History Card */
+    .history-card {
+      background-color: #ecf0f1;
+      padding: 12px;
+      border-radius: 8px;
+      margin-top: 10px;
+      font-size: 0.85rem;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+
+    .history-entry {
+      border-bottom: 1px solid #bdc3c7;
+      padding: 4px 0;
+    }
   </style>
 </head>
 <body>
@@ -294,8 +310,12 @@
             </div>
             <div class="ports">Open ports: ${renderPorts(d.open_ports, d.ip)}</div>
             <button onclick="viewSNMP(${d.id})">View SNMP</button>
+            <div class="history-card" id="history-${d.id}">
+              <!-- Device history will be loaded here -->
+            </div>
           `;
           cardContainer.appendChild(el);
+          loadDeviceHistory(d.id);
         });
       }
     }
@@ -352,31 +372,30 @@
       alert(text);
     }
 
-    async function seedSample() {
-      const samples = [
-        { ip: "192.168.1.10", hostname: "webserver-1", status: "Up", device_group: "Server", open_ports: "22,80,443", site: "Manchester" },
-        { ip: "192.168.1.20", hostname: "switch-1", status: "Up", device_group: "Switch", open_ports: "161", site: "Manchester" },
-        { ip: "192.168.2.30", hostname: "ip-phone-1", status: "Up", device_group: "VOIP", open_ports: "5060,80", site: "London" },
-        { ip: "192.168.3.40", hostname: "legacy-ftp", status: "Down", device_group: "Server", open_ports: "21", site: "Birmingham" },
-      ];
-      for (const s of samples) {
-        await fetch(`${API_BASE}/devices/`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(s)
-        });
-      }
-      await fetchDevices();
-    }
-
-    function reload() { fetchDevices(); }
-
     function toggleView() {
       tableView = !tableView;
       renderDevices(currentDevices);
     }
 
-    // Initial load
+    function seedSample() {
+      fetch(`${API_BASE}/seed/`).then(fetchDevices);
+    }
+
+    function reload() {
+      fetchDevices();
+    }
+
+    async function loadDeviceHistory(id) {
+      try {
+        const res = await fetch(`${API_BASE}/device/${id}/history`);
+        const history = await res.json();
+        const container = document.getElementById(`history-${id}`);
+        container.innerHTML = history.map(h => `<div class="history-entry">${h.timestamp}: ${h.event}</div>`).join('');
+      } catch (e) {
+        console.error('Failed to load history', e);
+      }
+    }
+
     fetchDevices();
   </script>
 </body>
