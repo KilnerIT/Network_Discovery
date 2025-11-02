@@ -151,6 +151,17 @@
       gap: 15px;
     }
 
+    .ports a {
+  color: #3498db;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.ports a:hover {
+  text-decoration: underline;
+}
+
+
     /* Responsive Design */
     @media (max-width: 768px) {
       .device-card {
@@ -214,24 +225,43 @@
               ${d.status || 'Unknown'}
             </div>
           </div>
-          <div class="ports">Open ports: ${renderPorts(d.open_ports)}</div>
+<div class="ports">Open ports: ${renderPorts(d.open_ports, d.ip)}</div>
           <button onclick="viewSNMP(${d.id})">View SNMP</button>
         `;
         container.appendChild(el);
       });
     }
 
-    function renderPorts(portStr) {
-      if (!portStr) return '—';
-      const suspicious = [21, 80, 8080];
-      return portStr.split(',').map(p => {
-        p = p.trim();
-        if (!p) return '';
-        const num = parseInt(p);
-        if (suspicious.includes(num)) return `<span class="highlight">${p}</span>`;
-        return `<span>${p}</span>`;
-      }).join(', ');
+function renderPorts(portStr, ip) {
+  if (!portStr) return '—';
+  const suspicious = [21, 80, 8080];
+  const webPorts = [80, 443, 8080];
+
+  return portStr.split(',').map(p => {
+    p = p.trim();
+    if (!p) return '';
+    const num = parseInt(p);
+    const isSuspicious = suspicious.includes(num);
+    const isWeb = webPorts.includes(num);
+
+    // Build the display text
+    let display;
+    if (isWeb) {
+      // Use https:// for 443, http:// for others
+      const protocol = num === 443 ? 'https' : 'http';
+      display = `<a href="${protocol}://${ip}:${num}" target="_blank">${num}</a>`;
+    } else {
+      display = `${num}`;
     }
+    
+    if (isSuspicious) {
+      display = `<span class="highlight">${display}</span>`;
+    }
+
+    return display;
+  }).join(', ');
+}
+
 
     function getIconClass(deviceGroup) {
       switch (deviceGroup.toLowerCase()) {
