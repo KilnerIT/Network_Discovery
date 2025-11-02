@@ -25,6 +25,7 @@ from scapy.all import IP, ICMP, sr1, TCP, sr, conf
 import requests
 
 # ===== Configuration =====
+SITE_NAME = "Home" # change per site
 SUBNET = "192.168.0.0/24"          # target subnet
 TARGET_PORTS = [22, 80, 443, 21, 8080, 161, 5060]   # ports to check
 API_ENDPOINT = "http://127.0.0.1:8000/devices/"     # FastAPI endpoint
@@ -141,6 +142,7 @@ def discover_single(ip: str):
 
     device = {
         "ip": ip,
+        "site": SITE_NAME,
         "hostname": hostname or "",
         "status": "Up",
         "last_seen": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
