@@ -82,7 +82,7 @@ def get_device_history(device_id: int):
     return device_history[device_id]
 
 # --- Sample data seeding ---
-@app.post("/seed/")
+@app.get("/seed/")
 def seed_sample():
     sample_devices = [
         {"ip": "192.168.1.10", "hostname": "webserver-1", "status": "Up", "device_group": "Server", "open_ports": "22,80,443", "site": "Manchester"},
