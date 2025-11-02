@@ -34,7 +34,8 @@ def init_db():
             status TEXT,
             last_seen TEXT,
             device_group TEXT,
-            open_ports TEXT
+            open_ports TEXT,
+            site TEXT
         )''')
         conn.commit()
         conn.close()
@@ -48,6 +49,7 @@ class DeviceIn(BaseModel):
     last_seen: Optional[str] = None
     device_group: Optional[str] = ""
     open_ports: Optional[str] = ""  # comma-separated
+    site: Optional[str] = ""        # new field for multi-site
 
 @app.post("/devices/", status_code=201)
 async def add_device(device: DeviceIn):
@@ -55,8 +57,8 @@ async def add_device(device: DeviceIn):
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(
-        "INSERT INTO devices (ip, hostname, status, last_seen, device_group, open_ports) VALUES (?, ?, ?, ?, ?, ?)",
-        (device.ip, device.hostname, device.status, last_seen, device.device_group, device.open_ports),
+        "INSERT INTO devices (ip, hostname, status, last_seen, device_group, open_ports, site) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (device.ip, device.hostname, device.status, last_seen, device.device_group, device.open_ports, device.site),
     )
     conn.commit()
     did = cur.lastrowid
@@ -64,9 +66,18 @@ async def add_device(device: DeviceIn):
     return {"id": did, "status": "created"}
 
 @app.get("/devices/")
-async def get_devices(limit: int = 50):
+async def get_devices(limit: int = 50, site: Optional[str] = None):
     conn = get_db_connection()
-    rows = conn.execute("SELECT * FROM devices ORDER BY last_seen DESC LIMIT ?", (limit,)).fetchall()
+    if site:
+        rows = conn.execute(
+            "SELECT * FROM devices WHERE site = ? ORDER BY last_seen DESC LIMIT ?",
+            (site, limit)
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM devices ORDER BY last_seen DESC LIMIT ?",
+            (limit,)
+        ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
