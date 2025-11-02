@@ -28,7 +28,7 @@ import requests
 SITE_NAME = "Home" # change per site
 SUBNET = "192.168.0.0/24"          # target subnet
 TARGET_PORTS = [22, 80, 443, 21, 8080, 161, 5060]   # ports to check
-API_ENDPOINT = "http://127.0.0.1:8000/devices/"     # FastAPI endpoint
+API_ENDPOINT = "http://127.0.0.1:8000/devices/upsert/"
 WORKERS = 80                       # concurrency: adjust to your env
 ICMP_TIMEOUT = 1.0
 TCP_TIMEOUT = 1.0
