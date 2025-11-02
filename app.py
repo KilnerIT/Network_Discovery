@@ -17,7 +17,6 @@ app.add_middleware(
 
 # --- Models ---
 class Device(BaseModel):
-    id: int
     ip: str
     hostname: Optional[str] = "Unknown"
     status: str
@@ -25,6 +24,9 @@ class Device(BaseModel):
     open_ports: str
     site: Optional[str] = "N/A"
     last_seen: str
+
+class Device(DeviceIn):
+    id: int
 
 class DeviceHistoryEntry(BaseModel):
     timestamp: str
@@ -67,23 +69,36 @@ def get_devices(site: Optional[str] = None):
     return devices
 
 @app.post("/devices/upsert/", response_model=Device)
-def upsert_device(data: dict = Body(...)):
+def upsert_device(data: DeviceIn):
     """Upsert a device based on its IP"""
     for d in devices:
-        if d.ip == data.get("ip"):
+        if d.ip == data.ip:
             # Update existing device
-            d.hostname = data.get("hostname", d.hostname)
-            d.status = data.get("status", d.status)
-            d.device_group = data.get("device_group", d.device_group)
-            d.open_ports = data.get("open_ports", d.open_ports)
-            d.site = data.get("site", d.site)
+            d.hostname = data.hostname or d.hostname
+            d.status = data.status
+            d.device_group = data.device_group
+            d.open_ports = data.open_ports
+            d.site = data.site
             d.last_seen = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             log_event(d.id, "Device updated via discovery")
             return d
 
     # Add new device
-    device = add_device(data)
+    device = Device(
+        id=next_id,
+        ip=data.ip,
+        hostname=data.hostname,
+        status=data.status,
+        device_group=data.device_group,
+        open_ports=data.open_ports,
+        site=data.site,
+        last_seen=datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
+    devices.append(device)
+    device_history[next_id] = [DeviceHistoryEntry(timestamp=device.last_seen, event="Device added")]
+    next_id += 1
     return device
+
 
 @app.get("/device/{device_id}", response_model=Device)
 def get_device(device_id: int):
