@@ -63,7 +63,7 @@ def get_devices(site: Optional[str] = None):
         return [d for d in devices if d.site == site]
     return devices
 
-@app.post("/devices/", response_model=Device)
+@app.get("/devices/", response_model=Device)
 def create_device(data: dict):
     device = add_device(data)
     return device
