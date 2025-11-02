@@ -1,79 +1,55 @@
-# app.py
-from fastapi import FastAPI, HTTPException, Body
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Optional, List, Dict
 from datetime import datetime
+import logging
 
-app = FastAPI(title="Network Discovery POC")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+log = logging.getLogger(__name__)
 
-# Allow CORS for frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"]
-)
+app = FastAPI(title="Network Device API")
 
-# --- Models ---
-class Device(BaseModel):
+# ===== Models =====
+class DeviceIn(BaseModel):
     ip: str
-    hostname: Optional[str] = "Unknown"
+    hostname: Optional[str] = ""
     status: str
     device_group: str
     open_ports: str
     site: Optional[str] = "N/A"
-    last_seen: str
+    last_seen: Optional[str] = None  # Optional, will be set by server
 
 class Device(DeviceIn):
-    id: int
+    id: int  # Assigned by server
 
 class DeviceHistoryEntry(BaseModel):
     timestamp: str
     event: str
 
-# --- In-memory storage ---
+# ===== Storage =====
 devices: List[Device] = []
-device_history: dict[int, List[DeviceHistoryEntry]] = {}
-
+device_history: Dict[int, List[DeviceHistoryEntry]] = {}
 next_id = 1
 
-# --- Helper functions ---
-def add_device(data: dict):
-    global next_id
-    device = Device(
-        id=next_id,
-        last_seen=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        **data
-    )
-    devices.append(device)
-    device_history[next_id] = [
-        DeviceHistoryEntry(timestamp=device.last_seen, event="Device added")
-    ]
-    next_id += 1
-    return device
-
+# ===== Helper =====
 def log_event(device_id: int, event: str):
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    entry = DeviceHistoryEntry(timestamp=now, event=event)
-    if device_id in device_history:
-        device_history[device_id].append(entry)
-    else:
-        device_history[device_id] = [entry]
+    entry = DeviceHistoryEntry(timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), event=event)
+    device_history.setdefault(device_id, []).append(entry)
 
-# --- Endpoints ---
+# ===== Endpoints =====
 @app.get("/devices/", response_model=List[Device])
-def get_devices(site: Optional[str] = None):
-    if site:
-        return [d for d in devices if d.site == site]
+def list_devices():
     return devices
 
 @app.post("/devices/upsert/", response_model=Device)
 def upsert_device(data: DeviceIn):
     """Upsert a device based on its IP"""
+    global next_id
+
+    # Check if device exists
     for d in devices:
         if d.ip == data.ip:
-            # Update existing device
+            # Update existing
             d.hostname = data.hostname or d.hostname
             d.status = data.status
             d.device_group = data.device_group
@@ -81,6 +57,7 @@ def upsert_device(data: DeviceIn):
             d.site = data.site
             d.last_seen = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             log_event(d.id, "Device updated via discovery")
+            log.info(f"Updated device {d.ip}")
             return d
 
     # Add new device
@@ -96,32 +73,12 @@ def upsert_device(data: DeviceIn):
     )
     devices.append(device)
     device_history[next_id] = [DeviceHistoryEntry(timestamp=device.last_seen, event="Device added")]
+    log.info(f"Added new device {device.ip} with id {next_id}")
     next_id += 1
     return device
 
-
-@app.get("/device/{device_id}", response_model=Device)
-def get_device(device_id: int):
-    for d in devices:
-        if d.id == device_id:
-            return d
-    raise HTTPException(status_code=404, detail="Device not found")
-
-@app.get("/device/{device_id}/history", response_model=List[DeviceHistoryEntry])
+@app.get("/devices/{device_id}/history/", response_model=List[DeviceHistoryEntry])
 def get_device_history(device_id: int):
     if device_id not in device_history:
         raise HTTPException(status_code=404, detail="Device history not found")
     return device_history[device_id]
-
-# --- Sample data seeding ---
-@app.get("/seed/")
-def seed_sample():
-    sample_devices = [
-        {"ip": "192.168.1.10", "hostname": "webserver-1", "status": "Up", "device_group": "Server", "open_ports": "22,80,443", "site": "Manchester"},
-        {"ip": "192.168.1.20", "hostname": "switch-1", "status": "Up", "device_group": "Switch", "open_ports": "161", "site": "Manchester"},
-        {"ip": "192.168.2.30", "hostname": "ip-phone-1", "status": "Up", "device_group": "VOIP", "open_ports": "5060,80", "site": "London"},
-        {"ip": "192.168.3.40", "hostname": "legacy-ftp", "status": "Down", "device_group": "Server", "open_ports": "21", "site": "Birmingham"},
-    ]
-    for s in sample_devices:
-        add_device(s)
-    return {"message": "Sample devices added."}
