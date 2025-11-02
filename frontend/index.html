@@ -15,6 +15,9 @@
       padding: 0;
       background-color: #f4f4f9;
       color: #333;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
     }
 
     header {
@@ -54,6 +57,7 @@
     }
 
     .container {
+      flex: 1;
       padding: 20px;
     }
 
@@ -131,20 +135,6 @@
       color: #e74c3c;
     }
 
-    .device button {
-      margin-top: 12px;
-      padding: 8px 14px;
-      border: none;
-      background-color: #3498db;
-      color: white;
-      border-radius: 5px;
-      cursor: pointer;
-    }
-
-    .device button:hover {
-      background-color: #2980b9;
-    }
-
     .device-list {
       display: flex;
       flex-wrap: wrap;
@@ -152,15 +142,47 @@
     }
 
     .ports a {
-  color: #3498db;
-  text-decoration: none;
-  font-weight: 500;
-}
+      color: #3498db;
+      text-decoration: none;
+      font-weight: 500;
+    }
 
-.ports a:hover {
-  text-decoration: underline;
-}
+    .ports a:hover {
+      text-decoration: underline;
+    }
 
+    footer {
+      background-color: #2C3E50;
+      color: white;
+      text-align: center;
+      padding: 12px;
+      font-size: 0.95rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background-color: white;
+      margin-top: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    th, td {
+      padding: 10px 15px;
+      border-bottom: 1px solid #ddd;
+      text-align: left;
+    }
+
+    th {
+      background-color: #34495e;
+      color: white;
+    }
+
+    tr:hover {
+      background-color: #f2f2f2;
+    }
 
     /* Responsive Design */
     @media (max-width: 768px) {
@@ -174,7 +196,6 @@
         flex: 1 1 100%;
       }
     }
-
   </style>
 </head>
 <body>
@@ -185,88 +206,140 @@
       <button onclick="reload()">Reload</button>
       <select id="siteFilter" onchange="reload()">
         <option value="">All Sites</option>
-        <option value="SiteA">Site A</option>
-        <option value="SiteB">Site B</option>
-        <option value="SiteC">Site C</option>
       </select>
+      <button onclick="toggleView()">Toggle Table/Card View</button>
     </div>
   </header>
 
   <div class="container">
     <h2>Recently Discovered Devices</h2>
     <div id="devices" class="device-list"></div>
+    <table id="deviceTable" style="display:none;">
+      <thead>
+        <tr>
+          <th>Hostname</th>
+          <th>IP</th>
+          <th>Status</th>
+          <th>Device Group</th>
+          <th>Open Ports</th>
+          <th>Site</th>
+          <th>Last Seen</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
   </div>
+
+  <footer id="footer">Total devices: 0</footer>
 
   <script>
     const API_BASE = "http://127.0.0.1:8000";
+    let currentDevices = [];
+    let tableView = false;
 
     async function fetchDevices() {
       const site = document.getElementById('siteFilter').value;
       const url = site ? `${API_BASE}/devices/?site=${site}` : `${API_BASE}/devices/`;
       const res = await fetch(url);
       const devices = await res.json();
-      const container = document.getElementById('devices');
-      container.innerHTML = '';
-      devices.forEach(d => {
-        const el = document.createElement('div');
-        el.className = 'device-card';
-        el.innerHTML = `
-          <div class="device-header">
-            <i class="fas ${getIconClass(d.device_group)}"></i>
-            <div>
-              <h3>${d.hostname || 'Unknown Hostname'} (${d.ip})</h3>
-              <div class="device-info">
-                Status: <em>${d.status || 'Unknown'}</em><br>
-                Last seen: ${d.last_seen || 'N/A'}<br>
-                Site: ${d.site || 'N/A'}
+      currentDevices = devices;
+      renderDevices(devices);
+      renderSiteDropdown(devices);
+      document.getElementById('footer').innerText = `Total devices: ${devices.length}`;
+    }
+
+    function renderDevices(devices) {
+      const cardContainer = document.getElementById('devices');
+      const table = document.getElementById('deviceTable');
+      const tbody = table.querySelector('tbody');
+      cardContainer.innerHTML = '';
+      tbody.innerHTML = '';
+
+      if (tableView) {
+        cardContainer.style.display = 'none';
+        table.style.display = 'table';
+        devices.forEach(d => {
+          const row = document.createElement('tr');
+          row.innerHTML = `
+            <td>${d.hostname || 'Unknown'}</td>
+            <td>${d.ip}</td>
+            <td>${d.status}</td>
+            <td>${d.device_group}</td>
+            <td>${renderPorts(d.open_ports, d.ip)}</td>
+            <td>${d.site || 'N/A'}</td>
+            <td>${d.last_seen || 'N/A'}</td>
+          `;
+          tbody.appendChild(row);
+        });
+      } else {
+        table.style.display = 'none';
+        cardContainer.style.display = 'flex';
+        devices.forEach(d => {
+          const el = document.createElement('div');
+          el.className = 'device-card';
+          el.innerHTML = `
+            <div class="device-header">
+              <i class="fas ${getIconClass(d.device_group)}"></i>
+              <div>
+                <h3>${d.hostname || 'Unknown Hostname'} (${d.ip})</h3>
+                <div class="device-info">
+                  Status: <em>${d.status || 'Unknown'}</em><br>
+                  Last seen: ${d.last_seen || 'N/A'}<br>
+                  Site: ${d.site || 'N/A'}
+                </div>
+              </div>
+              <div class="device-status ${d.status === 'Up' ? 'status-up' : 'status-down'}">
+                ${d.status || 'Unknown'}
               </div>
             </div>
-            <div class="device-status ${d.status === 'Up' ? 'status-up' : 'status-down'}">
-              ${d.status || 'Unknown'}
-            </div>
-          </div>
-<div class="ports">Open ports: ${renderPorts(d.open_ports, d.ip)}</div>
-          <button onclick="viewSNMP(${d.id})">View SNMP</button>
-        `;
-        container.appendChild(el);
+            <div class="ports">Open ports: ${renderPorts(d.open_ports, d.ip)}</div>
+            <button onclick="viewSNMP(${d.id})">View SNMP</button>
+          `;
+          cardContainer.appendChild(el);
+        });
+      }
+    }
+
+    function renderPorts(portStr, ip) {
+      if (!portStr) return '—';
+      const suspicious = [21, 80, 8080];
+      const webPorts = [80, 443, 8080];
+
+      return portStr.split(',').map(p => {
+        p = p.trim();
+        if (!p) return '';
+        const num = parseInt(p);
+        const isSuspicious = suspicious.includes(num);
+        const isWeb = webPorts.includes(num);
+        let display;
+        if (isWeb) {
+          const protocol = num === 443 ? 'https' : 'http';
+          const portPart = (num === 80 || num === 443) ? '' : `:${num}`;
+          display = `<a href="${protocol}://${ip}${portPart}" target="_blank" title="Open in browser">${num}</a>`;
+        } else {
+          display = `${num}`;
+        }
+        if (isSuspicious) display = `<span class="highlight">${display}</span>`;
+        return display;
+      }).join(', ');
+    }
+
+    function renderSiteDropdown(devices) {
+      const dropdown = document.getElementById('siteFilter');
+      const sites = [...new Set(devices.map(d => d.site).filter(Boolean))];
+      dropdown.innerHTML = `<option value="">All Sites</option>`;
+      sites.forEach(site => {
+        const opt = document.createElement('option');
+        opt.value = site;
+        opt.textContent = site;
+        dropdown.appendChild(opt);
       });
     }
 
-function renderPorts(portStr, ip) {
-  if (!portStr) return '—';
-  const suspicious = [21, 80, 8080];
-  const webPorts = [80, 443, 8080];
-
-  return portStr.split(',').map(p => {
-    p = p.trim();
-    if (!p) return '';
-    const num = parseInt(p);
-    const isSuspicious = suspicious.includes(num);
-    const isWeb = webPorts.includes(num);
-
-    // Build the display text
-    let display;
-    if (isWeb) {
-      // Use https:// for 443, http:// for others
-      const protocol = num === 443 ? 'https' : 'http';
-      display = `<a href="${protocol}://${ip}:${num}" target="_blank">${num}</a>`;
-    } else {
-      display = `${num}`;
-    }
-    
-    if (isSuspicious) {
-      display = `<span class="highlight">${display}</span>`;
-    }
-
-    return display;
-  }).join(', ');
-}
-
-
     function getIconClass(deviceGroup) {
-      switch (deviceGroup.toLowerCase()) {
+      switch (deviceGroup?.toLowerCase()) {
         case 'server': return 'fa-server';
-        case 'switch': return 'fa-cogs';
+        case 'switch': return 'fa-network-wired';
         case 'voip': return 'fa-phone';
         default: return 'fa-laptop';
       }
@@ -281,10 +354,10 @@ function renderPorts(portStr, ip) {
 
     async function seedSample() {
       const samples = [
-        { ip: "192.168.1.10", hostname: "webserver-1", status: "Up", device_group: "Server", open_ports: "22,80,443", site: "SiteA" },
-        { ip: "192.168.1.20", hostname: "switch-1", status: "Up", device_group: "Switch", open_ports: "161", site: "SiteA" },
-        { ip: "192.168.1.30", hostname: "ip-phone-1", status: "Up", device_group: "VOIP", open_ports: "5060,80", site: "SiteB" },
-        { ip: "192.168.1.40", hostname: "legacy-ftp", status: "Down", device_group: "Server", open_ports: "21", site: "SiteC" },
+        { ip: "192.168.1.10", hostname: "webserver-1", status: "Up", device_group: "Server", open_ports: "22,80,443", site: "Manchester" },
+        { ip: "192.168.1.20", hostname: "switch-1", status: "Up", device_group: "Switch", open_ports: "161", site: "Manchester" },
+        { ip: "192.168.2.30", hostname: "ip-phone-1", status: "Up", device_group: "VOIP", open_ports: "5060,80", site: "London" },
+        { ip: "192.168.3.40", hostname: "legacy-ftp", status: "Down", device_group: "Server", open_ports: "21", site: "Birmingham" },
       ];
       for (const s of samples) {
         await fetch(`${API_BASE}/devices/`, {
@@ -297,6 +370,11 @@ function renderPorts(portStr, ip) {
     }
 
     function reload() { fetchDevices(); }
+
+    function toggleView() {
+      tableView = !tableView;
+      renderDevices(currentDevices);
+    }
 
     // Initial load
     fetchDevices();
