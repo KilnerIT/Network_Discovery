@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
@@ -76,9 +77,25 @@ def log_event(db: Session, device_id: int, event: str):
     db.commit()
 
 # ===== Endpoints =====
+
+# NEW: Root endpoint to serve the HTML file
+@app.get("/", response_class=HTMLResponse)
+async def get_index():
+    """Serves the index.html file."""
+    try:
+        # Assumes index.html is in the same directory as app.py
+        with open("index.html", "r") as f:
+            return f.read()
+    except FileNotFoundError:
+        return "<html><body><h1>Error</h1><p>index.html file not found.</p></body></html>"
+
+# CORRECTED: Handles the optional 'site' query parameter
 @app.get("/devices/", response_model=List[Device])
-def list_devices(db: Session = Depends(get_db)):
-    return db.query(DeviceModel).all()
+def list_devices(site: Optional[str] = None, db: Session = Depends(get_db)):
+    query = db.query(DeviceModel)
+    if site:
+        query = query.filter(DeviceModel.site == site)
+    return query.all()
 
 @app.post("/devices/upsert/", response_model=Device)
 def upsert_device(data: DeviceIn, db: Session = Depends(get_db)):
@@ -115,29 +132,14 @@ def upsert_device(data: DeviceIn, db: Session = Depends(get_db)):
     log.info(f"Added new device {device.ip} with id {device.id}")
     return device
 
+# CORRECTED: Returns [] instead of raising 404 if no history is found
 @app.get("/devices/{device_id}/history/", response_model=List[DeviceHistoryEntry])
 def get_device_history(device_id: int, db: Session = Depends(get_db)):
     entries = db.query(DeviceHistoryModel).filter(DeviceHistoryModel.device_id == device_id).all()
-    if not entries:
-        raise HTTPException(status_code=404, detail="Device history not found")
+    # If no history entries, return an empty list for a clean frontend experience
     return entries
 
-# ===== Endpoints =====
-@app.get("/devices/", response_model=List[Device])
-def list_devices(db: Session = Depends(get_db)):
-    return db.query(DeviceModel).all()
-
-@app.post("/devices/upsert/", response_model=Device)
-# ... (rest of the upsert_device function) ...
-
-@app.get("/devices/{device_id}/history/", response_model=List[DeviceHistoryEntry])
-def get_device_history(device_id: int, db: Session = Depends(get_db)):
-    entries = db.query(DeviceHistoryModel).filter(DeviceHistoryModel.device_id == device_id).all()
-    if not entries:
-        raise HTTPException(status_code=404, detail="Device history not found")
-    return entries
-
-# 💥 ADD THE NEW CODE HERE 💥
+# Seed endpoint (as previously provided)
 @app.get("/seed/")
 def seed_database(db: Session = Depends(get_db)):
     """
@@ -172,21 +174,14 @@ def seed_database(db: Session = Depends(get_db)):
 
     count = 0
     for data in sample_data:
-        # Check if device already exists to prevent duplicate IP errors
         device = db.query(DeviceModel).filter(DeviceModel.ip == data["ip"]).first()
         if not device:
             new_device = DeviceModel(**data)
             db.add(new_device)
             db.commit()
             db.refresh(new_device)
-            # Log an event for the new device creation
             log_event(db, new_device.id, "Device seeded as sample data") 
             log.info(f"Seeded device {new_device.ip}")
             count += 1
     
     return {"message": f"Database seeded with {count} new devices."}
-
-
-
-
-
