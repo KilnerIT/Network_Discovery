@@ -256,12 +256,17 @@
     async function fetchDevices() {
       const site = document.getElementById('siteFilter').value;
       const url = site ? `${API_BASE}/devices/?site=${site}` : `${API_BASE}/devices/`;
-      const res = await fetch(url);
-      const devices = await res.json();
-      currentDevices = devices;
-      renderDevices(devices);
-      renderSiteDropdown(devices);
-      document.getElementById('footer').innerText = `Total devices: ${devices.length}`;
+      try {
+          const res = await fetch(url);
+          const devices = await res.json();
+          currentDevices = devices;
+          renderDevices(devices);
+          renderSiteDropdown(devices);
+          document.getElementById('footer').innerText = `Total devices: ${devices.length}`;
+      } catch (error) {
+          console.error("Error fetching devices:", error);
+          document.getElementById('devices').innerHTML = '<p class="highlight">Error loading devices. Check API console for details.</p>';
+      }
     }
 
     function renderDevices(devices) {
@@ -270,6 +275,12 @@
       const tbody = table.querySelector('tbody');
       cardContainer.innerHTML = '';
       tbody.innerHTML = '';
+
+      if (!Array.isArray(devices)) {
+          console.error("Data received is not an array:", devices);
+          cardContainer.innerHTML = '<p class="highlight">Data format error. Cannot render devices.</p>';
+          return;
+      }
 
       if (tableView) {
         cardContainer.style.display = 'none';
@@ -366,7 +377,8 @@
     }
 
     async function viewSNMP(id) {
-      const res = await fetch(`${API_BASE}/device/${id}`);
+      // FIX: Changed to plural /devices/${id}/ to match the new FastAPI endpoint
+      const res = await fetch(`${API_BASE}/devices/${id}/`); 
       const d = await res.json();
       const text = `SNMP View\nHostname: ${d.hostname}\nIP: ${d.ip}\nGroup: ${d.device_group}\nStatus: ${d.status}\nOpen ports: ${d.open_ports}\nSite: ${d.site}`;
       alert(text);
@@ -387,7 +399,8 @@
 
     async function loadDeviceHistory(id) {
       try {
-        const res = await fetch(`${API_BASE}/device/${id}/history`);
+        // FIX: Changed to plural /devices/${id}/history/ to match the FastAPI endpoint
+        const res = await fetch(`${API_BASE}/devices/${id}/history`); 
         const history = await res.json();
         const container = document.getElementById(`history-${id}`);
         container.innerHTML = history.map(h => `<div class="history-entry">${h.timestamp}: ${h.event}</div>`).join('');
