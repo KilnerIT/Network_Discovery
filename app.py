@@ -4,9 +4,13 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 import logging
+from pathlib import Path # Import for robust file path handling
 
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey
 from sqlalchemy.orm import declarative_base, sessionmaker, Session, relationship
+
+# Get the directory where app.py itself resides for robust file lookup
+BASE_DIR = Path(__file__).resolve().parent
 
 # ===== Logging =====
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -78,19 +82,25 @@ def log_event(db: Session, device_id: int, event: str):
 
 # ===== Endpoints =====
 
-# CORRECTED: Root endpoint to serve the HTML file
 @app.get("/", response_class=HTMLResponse)
 async def get_index():
     """Serves the index.html file from the frontend/ directory."""
-    # Define the path to the index.html file
-    html_file_path = Path("frontend") / "index.html"
+    
+    # Construct the absolute path to the HTML file
+    # This is crucial for Uvicorn to find the file reliably regardless of the CWD.
+    html_file_path = BASE_DIR / "frontend" / "index.html"
+    
     try:
+        # Open the file using the absolute path
         with open(html_file_path, "r") as f:
             return f.read()
     except FileNotFoundError:
-        return HTMLResponse("<html><body><h1>Error</h1><p>index.html file not found in the 'frontend' directory.</p></body></html>", status_code=404)
+        # Provide a clear 404 error if the file isn't found
+        return HTMLResponse(
+            f"<html><body><h1>Error 404</h1><p>Frontend file (index.html) not found at: {html_file_path}</p></body></html>", 
+            status_code=404
+        )
 
-# CORRECTED: Handles the optional 'site' query parameter
 @app.get("/devices/", response_model=List[Device])
 def list_devices(site: Optional[str] = None, db: Session = Depends(get_db)):
     query = db.query(DeviceModel)
@@ -133,14 +143,12 @@ def upsert_device(data: DeviceIn, db: Session = Depends(get_db)):
     log.info(f"Added new device {device.ip} with id {device.id}")
     return device
 
-# CORRECTED: Returns [] instead of raising 404 if no history is found
 @app.get("/devices/{device_id}/history/", response_model=List[DeviceHistoryEntry])
 def get_device_history(device_id: int, db: Session = Depends(get_db)):
     entries = db.query(DeviceHistoryModel).filter(DeviceHistoryModel.device_id == device_id).all()
-    # If no history entries, return an empty list for a clean frontend experience
+    # Return an empty list if no history is found (cleaner for frontend)
     return entries
 
-# Seed endpoint (as previously provided)
 @app.get("/seed/")
 def seed_database(db: Session = Depends(get_db)):
     """
