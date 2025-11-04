@@ -121,3 +121,72 @@ def get_device_history(device_id: int, db: Session = Depends(get_db)):
     if not entries:
         raise HTTPException(status_code=404, detail="Device history not found")
     return entries
+
+# ===== Endpoints =====
+@app.get("/devices/", response_model=List[Device])
+def list_devices(db: Session = Depends(get_db)):
+    return db.query(DeviceModel).all()
+
+@app.post("/devices/upsert/", response_model=Device)
+# ... (rest of the upsert_device function) ...
+
+@app.get("/devices/{device_id}/history/", response_model=List[DeviceHistoryEntry])
+def get_device_history(device_id: int, db: Session = Depends(get_db)):
+    entries = db.query(DeviceHistoryModel).filter(DeviceHistoryModel.device_id == device_id).all()
+    if not entries:
+        raise HTTPException(status_code=404, detail="Device history not found")
+    return entries
+
+# 💥 ADD THE NEW CODE HERE 💥
+@app.get("/seed/")
+def seed_database(db: Session = Depends(get_db)):
+    """
+    Adds a few sample devices and history entries for testing.
+    """
+    sample_data = [
+        {
+            "ip": "192.168.1.1",
+            "hostname": "GatewayRouter",
+            "status": "Up",
+            "device_group": "Switch/Network",
+            "open_ports": "80,443,22",
+            "site": "Home"
+        },
+        {
+            "ip": "192.168.1.10",
+            "hostname": "Web-Server",
+            "status": "Up",
+            "device_group": "Server",
+            "open_ports": "8080,22",
+            "site": "Data Center"
+        },
+        {
+            "ip": "192.168.1.50",
+            "hostname": "User-PC",
+            "status": "Down",
+            "device_group": "Unknown",
+            "open_ports": "",
+            "site": "Home"
+        }
+    ]
+
+    count = 0
+    for data in sample_data:
+        # Check if device already exists to prevent duplicate IP errors
+        device = db.query(DeviceModel).filter(DeviceModel.ip == data["ip"]).first()
+        if not device:
+            new_device = DeviceModel(**data)
+            db.add(new_device)
+            db.commit()
+            db.refresh(new_device)
+            # Log an event for the new device creation
+            log_event(db, new_device.id, "Device seeded as sample data") 
+            log.info(f"Seeded device {new_device.ip}")
+            count += 1
+    
+    return {"message": f"Database seeded with {count} new devices."}
+
+
+
+
+
