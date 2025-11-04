@@ -50,6 +50,7 @@
       font-size: 1rem;
       border-radius: 5px;
       cursor: pointer;
+      transition: background-color 0.2s;
     }
 
     header button:hover, header select:hover {
@@ -75,8 +76,9 @@
       border-radius: 10px;
       box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
       margin: 12px 0;
-      cursor: pointer;
+      cursor: default;
       transition: transform 0.2s ease, box-shadow 0.2s ease;
+      width: 300px; /* Constrain card width for better wrapping */
     }
 
     .device-card:hover {
@@ -93,6 +95,7 @@
     .device-header i {
       font-size: 2rem;
       margin-right: 12px;
+      color: #3498db;
     }
 
     .device-header h3 {
@@ -106,6 +109,7 @@
       padding: 6px 12px;
       border-radius: 12px;
       font-size: 0.9rem;
+      text-transform: uppercase;
     }
 
     .status-up {
@@ -128,6 +132,7 @@
       font-size: 0.9rem;
       color: #34495e;
       margin-top: 10px;
+      word-break: break-all;
     }
 
     .highlight {
@@ -139,6 +144,7 @@
       display: flex;
       flex-wrap: wrap;
       gap: 15px;
+      justify-content: flex-start;
     }
 
     .ports a {
@@ -157,6 +163,7 @@
       text-align: center;
       padding: 12px;
       font-size: 0.95rem;
+      margin-top: 20px;
     }
 
     table {
@@ -187,13 +194,7 @@
     /* Responsive Design */
     @media (max-width: 768px) {
       .device-card {
-        flex: 1 1 45%;
-      }
-    }
-
-    @media (max-width: 480px) {
-      .device-card {
-        flex: 1 1 100%;
+        width: 100%;
       }
     }
 
@@ -206,11 +207,15 @@
       font-size: 0.85rem;
       max-height: 200px;
       overflow-y: auto;
+      border: 1px solid #bdc3c7;
     }
 
     .history-entry {
       border-bottom: 1px solid #bdc3c7;
       padding: 4px 0;
+    }
+    .history-entry:last-child {
+      border-bottom: none;
     }
   </style>
 </head>
@@ -249,23 +254,46 @@
   <footer id="footer">Total devices: 0</footer>
 
   <script>
+    // IMPORTANT: Ensure this API_BASE matches your Uvicorn port
     const API_BASE = "http://127.0.0.1:8000";
     let currentDevices = [];
     let tableView = false;
 
+    // Custom non-blocking alert function to replace window.alert
+    function customAlert(message) {
+        // Simple console log for non-blocking alerts
+        console.log(`[ALERT]: ${message}`);
+        
+        // For visual feedback (you would typically use a modal)
+        const feedback = document.createElement('div');
+        feedback.className = 'device-status status-up';
+        feedback.textContent = 'SNMP Info Logged to Console.';
+        feedback.style.position = 'fixed';
+        feedback.style.top = '10px';
+        feedback.style.right = '10px';
+        feedback.style.zIndex = '1000';
+        document.body.appendChild(feedback);
+        setTimeout(() => feedback.remove(), 3000);
+    }
+
     async function fetchDevices() {
       const site = document.getElementById('siteFilter').value;
-      const url = site ? `${API_BASE}/devices/?site=${site}` : `${API_BASE}/devices/`;
+      // Fetch devices, avoiding a trailing slash if not filtering
+      const url = site ? `${API_BASE}/devices?site=${site}` : `${API_BASE}/devices`; 
       try {
           const res = await fetch(url);
+          // Check for non-200 responses before attempting to parse JSON
+          if (!res.ok) {
+              throw new Error(`API returned status ${res.status}: ${res.statusText}`);
+          }
           const devices = await res.json();
           currentDevices = devices;
           renderDevices(devices);
           renderSiteDropdown(devices);
           document.getElementById('footer').innerText = `Total devices: ${devices.length}`;
       } catch (error) {
-          console.error("Error fetching devices:", error);
-          document.getElementById('devices').innerHTML = '<p class="highlight">Error loading devices. Check API console for details.</p>';
+          console.error("Error fetching devices. Check network tab and API server logs:", error);
+          document.getElementById('devices').innerHTML = '<p class="highlight">Error loading devices. Check API server (port 8000) status and browser console for errors.</p>';
       }
     }
 
@@ -294,7 +322,7 @@
             <td>${d.device_group}</td>
             <td>${renderPorts(d.open_ports, d.ip)}</td>
             <td>${d.site || 'N/A'}</td>
-            <td>${d.last_seen || 'N/A'}</td>
+            <td>${d.last_seen ? new Date(d.last_seen).toLocaleString() : 'N/A'}</td>
           `;
           tbody.appendChild(row);
         });
@@ -311,7 +339,7 @@
                 <h3>${d.hostname || 'Unknown Hostname'} (${d.ip})</h3>
                 <div class="device-info">
                   Status: <em>${d.status || 'Unknown'}</em><br>
-                  Last seen: ${d.last_seen || 'N/A'}<br>
+                  Last seen: ${d.last_seen ? new Date(d.last_seen).toLocaleString() : 'N/A'}<br>
                   Site: ${d.site || 'N/A'}
                 </div>
               </div>
@@ -320,9 +348,9 @@
               </div>
             </div>
             <div class="ports">Open ports: ${renderPorts(d.open_ports, d.ip)}</div>
-            <button onclick="viewSNMP(${d.id})">View SNMP</button>
+            <button onclick="viewSNMP(${d.id})">View SNMP (Check Console)</button>
             <div class="history-card" id="history-${d.id}">
-              <!-- Device history will be loaded here -->
+              Loading history...
             </div>
           `;
           cardContainer.appendChild(el);
@@ -346,6 +374,7 @@
         if (isWeb) {
           const protocol = num === 443 ? 'https' : 'http';
           const portPart = (num === 80 || num === 443) ? '' : `:${num}`;
+          // Links to open host in browser
           display = `<a href="${protocol}://${ip}${portPart}" target="_blank" title="Open in browser">${num}</a>`;
         } else {
           display = `${num}`;
@@ -357,12 +386,18 @@
 
     function renderSiteDropdown(devices) {
       const dropdown = document.getElementById('siteFilter');
-      const sites = [...new Set(devices.map(d => d.site).filter(Boolean))];
+      // Get unique sites, filtering out null/empty strings
+      const sites = [...new Set(devices.map(d => d.site).filter(s => s && s !== 'N/A'))];
+      const currentSelection = dropdown.value;
+      
       dropdown.innerHTML = `<option value="">All Sites</option>`;
       sites.forEach(site => {
         const opt = document.createElement('option');
         opt.value = site;
         opt.textContent = site;
+        if (site === currentSelection) {
+            opt.selected = true;
+        }
         dropdown.appendChild(opt);
       });
     }
@@ -370,18 +405,28 @@
     function getIconClass(deviceGroup) {
       switch (deviceGroup?.toLowerCase()) {
         case 'server': return 'fa-server';
-        case 'switch': return 'fa-network-wired';
+        case 'switch/network': return 'fa-network-wired';
         case 'voip': return 'fa-phone';
+        case 'web/http': return 'fa-globe';
         default: return 'fa-laptop';
       }
     }
 
     async function viewSNMP(id) {
-      // FIX: Changed to plural /devices/${id}/ to match the new FastAPI endpoint
-      const res = await fetch(`${API_BASE}/devices/${id}/`); 
-      const d = await res.json();
-      const text = `SNMP View\nHostname: ${d.hostname}\nIP: ${d.ip}\nGroup: ${d.device_group}\nStatus: ${d.status}\nOpen ports: ${d.open_ports}\nSite: ${d.site}`;
-      alert(text);
+      // FIX: Using the URL path without a trailing slash to align with clean API routing
+      const url = `${API_BASE}/devices/${id}`;
+      try {
+          const res = await fetch(url);
+          if (!res.ok) {
+              throw new Error(`Could not fetch device ID ${id}. Status: ${res.status}`);
+          }
+          const d = await res.json();
+          const text = `SNMP View for Device ID: ${id}\n\nHostname: ${d.hostname}\nIP: ${d.ip}\nGroup: ${d.device_group}\nStatus: ${d.status}\nOpen ports: ${d.open_ports}\nSite: ${d.site}`;
+          customAlert(text); // Use custom non-blocking alert
+      } catch (e) {
+          console.error('Failed to view SNMP data:', e);
+          customAlert('Error retrieving device info. Check console.');
+      }
     }
 
     function toggleView() {
@@ -398,14 +443,33 @@
     }
 
     async function loadDeviceHistory(id) {
+      // FIX: Using the URL path without a trailing slash to align with clean API routing
+      const url = `${API_BASE}/devices/${id}/history`;
+      const container = document.getElementById(`history-${id}`);
+      if (!container) return; 
+
       try {
-        // FIX: Changed to plural /devices/${id}/history/ to match the FastAPI endpoint
-        const res = await fetch(`${API_BASE}/devices/${id}/history`); 
+        const res = await fetch(url);
+        if (!res.ok) {
+            throw new Error(`Could not fetch history for ID ${id}. Status: ${res.status}`);
+        }
         const history = await res.json();
-        const container = document.getElementById(`history-${id}`);
-        container.innerHTML = history.map(h => `<div class="history-entry">${h.timestamp}: ${h.event}</div>`).join('');
+        
+        if (history.length === 0) {
+            container.innerHTML = 'No history recorded.';
+            return;
+        }
+
+        // IMPROVEMENT: Format the ISO timestamp string into a readable local time string
+        container.innerHTML = history.map(h => {
+            // Check if h.timestamp is a valid date string before creating Date object
+            const timestamp = h.timestamp ? new Date(h.timestamp).toLocaleString() : 'N/A';
+            return `<div class="history-entry">${timestamp}: ${h.event}</div>`;
+        }).join('');
+
       } catch (e) {
-        console.error('Failed to load history', e);
+        console.error(`Failed to load history for device ${id}`, e);
+        container.innerHTML = 'Failed to load history.';
       }
     }
 
