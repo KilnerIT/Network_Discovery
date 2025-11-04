@@ -78,16 +78,17 @@ def log_event(db: Session, device_id: int, event: str):
 
 # ===== Endpoints =====
 
-# NEW: Root endpoint to serve the HTML file
+# CORRECTED: Root endpoint to serve the HTML file
 @app.get("/", response_class=HTMLResponse)
 async def get_index():
-    """Serves the index.html file."""
+    """Serves the index.html file from the frontend/ directory."""
+    # Define the path to the index.html file
+    html_file_path = Path("frontend") / "index.html"
     try:
-        # Assumes index.html is in the same directory as app.py
-        with open("index.html", "r") as f:
+        with open(html_file_path, "r") as f:
             return f.read()
     except FileNotFoundError:
-        return "<html><body><h1>Error</h1><p>index.html file not found.</p></body></html>"
+        return HTMLResponse("<html><body><h1>Error</h1><p>index.html file not found in the 'frontend' directory.</p></body></html>", status_code=404)
 
 # CORRECTED: Handles the optional 'site' query parameter
 @app.get("/devices/", response_model=List[Device])
